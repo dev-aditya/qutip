@@ -31,7 +31,7 @@ import qutip.settings as settings
 from qutip.cy.spconvert import dense2D_to_fastcsr_fmode
 
 import qutip.logging_utils
-logger = qutip.logging_utils.get_logger()
+logger = qutip.logging_utils.get_logger('qutip.steadystate')
 logger.setLevel('DEBUG')
 
 # Load MKL spsolve if avaiable
@@ -1148,7 +1148,7 @@ def _pseudo_inverse_dense(L, rhoss, w=None, **pseudo_args):
         try:
             LIQ = np.linalg.solve(L.full(), Q)
         except Exception:
-            LIQ = np.linalg.lstsq(L.full(), Q)[0]
+            LIQ = np.linalg.lstsq(L.full(), Q, rcond=None)[0]
 
         R = np.dot(Q, LIQ)
 
