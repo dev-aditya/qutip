@@ -1,10 +1,10 @@
 __all__ = ['qpt_plot', 'qpt_plot_combined', 'qpt']
 
-from qutip.tensor import tensor
-from qutip.superoperator import spre, spost, mat2vec, vec2mat
 from numpy import hstack, real, imag
 import scipy.linalg as la
-from qutip.visualization import matrix_histogram, matrix_histogram_complex
+from . import tensor, spre, spost, stack_columns, unstack_columns
+from .visualization import matrix_histogram
+import itertools
 
 try:
     import matplotlib.pyplot as plt
@@ -12,7 +12,7 @@ except:
     pass
 
 
-def _index_permutations(size_list, perm=[]):
+def _index_permutations(size_list):
     """
     Generate a list with all index permutations.
 
@@ -20,22 +20,14 @@ def _index_permutations(size_list, perm=[]):
     ----------
     size_list : list
         A list that contains the sizes for each composite system.
-    perm : list
-        A list of permutations
 
     Returns
     -------
     perm_idx : list
         List containing index permutations.
 
-
     """
-    if len(size_list) == 0:
-        yield perm
-    else:
-        for n in range(size_list[0]):
-            for ip in _index_permutations(size_list[1:], perm + [n]):
-                yield ip
+    return itertools.product(*[range(N) for N in size_list])
 
 
 def qpt_plot(chi, lbls_list, title=None, fig=None, axes=None):
@@ -79,10 +71,11 @@ def qpt_plot(chi, lbls_list, title=None, fig=None, axes=None):
         xlabels.append("".join([lbls_list[k][inds[k]]
                                 for k in range(len(lbls_list))]))
 
-    matrix_histogram(real(chi), xlabels, xlabels,
-                     title=r"real($\chi$)", limits=[-1, 1], ax=axes[0])
-    matrix_histogram(imag(chi), xlabels, xlabels,
-                     title=r"imag($\chi$)", limits=[-1, 1], ax=axes[1])
+    matrix_histogram(real(chi), xlabels, xlabels, limits=[-1, 1], ax=axes[0])
+    axes[0].set_title(r"real($\chi$)")
+
+    matrix_histogram(imag(chi), xlabels, xlabels, limits=[-1, 1], ax=axes[1])
+    axes[1].set_title(r"imag($\chi$)")
 
     if title and fig:
         fig.suptitle(title)
@@ -140,8 +133,10 @@ def qpt_plot_combined(chi, lbls_list, title=None,
     if not title:
         title = r"$\chi$"
 
-    matrix_histogram_complex(chi, xlabels, xlabels, title=title, ax=ax,
-                             threshold=threshold)
+    matrix_histogram(chi, xlabels, xlabels, bar_style='abs',
+                     color_style='phase',
+                     options={'threshold': threshold}, ax=ax)
+    ax.set_title(title)
 
     return fig, ax
 
@@ -156,7 +151,7 @@ def qpt(U, op_basis_list):
 
         or
 
-        rho = vec2mat(U * mat2vec(rho0))
+        rho = unstack_columns(U * stack_columns(rho0))
 
     U can be calculated for an open quantum system using the QuTiP propagator
     function.
@@ -184,13 +179,8 @@ def qpt(U, op_basis_list):
         E_op_list = [op_basis_list[k][inds[k]] for k in range(len(
             op_basis_list))]
         E_ops.append(tensor(E_op_list))
-
     EE_ops = [spre(E1) * spost(E2.dag()) for E1 in E_ops for E2 in E_ops]
-
-    M = hstack([mat2vec(EE.full()) for EE in EE_ops])
-
-    Uvec = mat2vec(U.full())
-
+    M = hstack([EE.full().ravel('F')[:, None] for EE in EE_ops])
+    Uvec = U.full().ravel('F')
     chi_vec = la.solve(M, Uvec)
-
-    return vec2mat(chi_vec)
+    return chi_vec.reshape(U.shape).T
